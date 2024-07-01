@@ -8,6 +8,16 @@ pub enum Token {
     SquareBracket(char),
     Num(i64),
     Str(String),
+    BackSlash,
+    DoubleRightArrow,
+    SingleRightArrow,
+    SingleLeftArrow,
+    Comma,
+    SemiColon,
+    Colon,
+    UnaryOperator(String),
+    BinaryOperator(String),
+    Keyword(String),
 }
 
 pub fn lex(code_str: &str) -> Vec<Token> {
@@ -18,8 +28,9 @@ pub fn lex(code_str: &str) -> Vec<Token> {
 
     while idx < chars.len() {
         match chars[idx] {
+
             'a' ..= 'z' | 'A'..='Z' | '_' => {
-                result_tokens.push(parse_identifier(&chars, &mut idx));
+                result_tokens.push(parse_keyword_or_identifier(&chars, &mut idx));
             }
             '0' ..= '9' => {
                 result_tokens.push(parse_number(&chars, &mut idx));
@@ -43,6 +54,101 @@ pub fn lex(code_str: &str) -> Vec<Token> {
                 idx += 1;
             }
 
+            '"' => {
+                result_tokens.push(parse_string(&chars, &mut idx));
+            }
+
+            '\\' => {
+                result_tokens.push(Token::BackSlash);
+                idx += 1;
+            }
+
+            '-' => {
+                if idx + 1 < chars.len() && chars[idx + 1] == '>' {
+                    result_tokens.push(Token::SingleRightArrow);
+                    idx += 2;
+                } else {
+                    result_tokens.push(Token::BinaryOperator("-".to_string()));
+                    idx += 1;
+                }
+            }
+
+            '+' => {
+                result_tokens.push(Token::BinaryOperator("+".to_string()));
+                idx += 1;
+            }
+
+            '*' => {
+                result_tokens.push(Token::BinaryOperator("*".to_string()));
+                idx += 1;
+            }
+
+            '/' => {
+                result_tokens.push(Token::BinaryOperator("/".to_string()));
+                idx += 1;
+            }
+
+            '!' => {
+                if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    result_tokens.push(Token::BinaryOperator("!=".to_string()));
+                    idx += 2;
+                } else {
+                    result_tokens.push(Token::UnaryOperator("!".to_string()));
+                    idx += 1;
+                }
+            }
+
+            '=' => {
+                if idx + 1 < chars.len() && chars[idx + 1] == '>' {
+                    result_tokens.push(Token::DoubleRightArrow);
+                    idx += 2;
+                } else if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    result_tokens.push(Token::BinaryOperator("==".to_string()));
+                    idx += 2;
+                } else {
+                    result_tokens.push(Token::BinaryOperator("=".to_string()));
+                    idx += 1;
+                }
+            }
+
+            '<' => {
+                if idx + 1 < chars.len() && chars[idx + 1] == '-' {
+                    result_tokens.push(Token::SingleLeftArrow);
+                    idx += 2;
+                } else if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    result_tokens.push(Token::BinaryOperator("<=".to_string()));
+                    idx += 2;
+                } else {
+                    result_tokens.push(Token::BinaryOperator("<".to_string()));
+                    idx += 1;
+                }
+            }
+
+            '>' => {
+                if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    result_tokens.push(Token::BinaryOperator(">=".to_string()));
+                    idx += 2;
+                } else {
+                    result_tokens.push(Token::BinaryOperator(">".to_string()));
+                    idx += 1;
+                }
+            }
+
+            ',' => {
+                result_tokens.push(Token::Comma);
+                idx += 1;
+            }
+
+            ';' => {
+                result_tokens.push(Token::SemiColon);
+                idx += 1;
+            }
+
+            ':' => {
+                result_tokens.push(Token::Colon);
+                idx += 1;
+            }
+
             _ => {
                 idx += 1;
             }
@@ -54,7 +160,29 @@ pub fn lex(code_str: &str) -> Vec<Token> {
     return result_tokens;
 }
 
-fn parse_identifier(chars: &[char], idx: &mut usize) -> Token {
+fn parse_string(chars: &[char], idx: &mut usize) -> Token {
+    let mut string = String::new();
+    *idx += 1;
+    while *idx < chars.len() {
+        match chars[*idx] {
+            '"' => {
+                *idx += 1;
+                break;
+            }
+            _ => {
+                string.push(chars[*idx]);
+                *idx += 1;
+            }
+        }
+    }
+
+    return Token::Str(string);
+}
+
+
+fn parse_keyword_or_identifier(chars: &[char], idx: &mut usize) -> Token {
+
+    const KEYWORDS: [&str; 6] = ["if", "then", "else", "struct", "variant", "return"];
     let mut identifier = String::new();
     while *idx < chars.len() {
         match chars[*idx] {
@@ -64,6 +192,10 @@ fn parse_identifier(chars: &[char], idx: &mut usize) -> Token {
             },
             _ => break,
         }
+    }
+
+    if KEYWORDS.contains(&identifier.as_str()) {
+        return Token::Keyword(identifier);
     }
 
     return Token::Identifier(identifier);
