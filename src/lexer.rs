@@ -1,6 +1,7 @@
 
 #[allow(dead_code)]
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum Token {
     Identifier(String),
     Parenthesis(char),
