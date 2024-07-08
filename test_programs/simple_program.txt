@@ -1,0 +1,14 @@
+program.add({
+    c <- { x <- 2, y <- 3},
+    nodes: [],
+    render = \\center, nodes -> {
+        doStuff();
+        return this;
+    },
+    
+    interpret = \\langElement -> {
+        doStuff();
+        return something;
+    },
+
+}");

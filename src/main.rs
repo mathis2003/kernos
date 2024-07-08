@@ -25,7 +25,7 @@ use parser::{parse_function_literal, parse_record_literal, ParseResult};
     return 2;
 }";*/
 
-const TEST_RECORD_STRING: &'static str = "{ a <- 1, b <- 2, f <- \\-> { return 1; }}";
+//const TEST_RECORD_STRING: &'static str = "{ a <- 1, b <- 2, f <- \\-> { return 1; }}";
 // const identifiers_string: &'static str = "abc def";
 // const numbers_string: &'static str = "123 456";
 
@@ -48,8 +48,10 @@ fn main() {
 
     println!("{:?}", function_literal);*/
 
+    let record_file_contents = std::fs::read_to_string("test_programs/test_record.txt").expect("Should have been able to read the file");
+
     println!("\n\nRecord tokens:\n\n");
-    let record_tokens: Vec<Token> = lex(TEST_RECORD_STRING);
+    let record_tokens: Vec<Token> = lex(record_file_contents.as_str());
     for token in &record_tokens {
         println!("{:?}", token);
     }
