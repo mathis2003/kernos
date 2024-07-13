@@ -1,55 +1,73 @@
-use crate::parser::parser_utils::ParseResult;
+use crate::parser::parser_utils::{ParseResult, eat_whitespace};
 use crate::parser::function_literal::{ parse_function_literal, FunctionLiteral };
 use crate::parser::record_literal::{ parse_record_literal, Record };
-use crate::lexer::Token;
+use crate::parser::identifier::{ parse_identifier, Identifier };
+use crate::parser::number::{ parse_number, Number };
 
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum Expression {
-    Identifier(String),
-    NumberLiteral(i64),
-    RecordLiteral(Record),
+    Identifier(Identifier),
+    NumberLiteral(Number),
+    Record(Record),
     FunctionLiteral(FunctionLiteral),
 }
 
+pub fn parse_expression(chars: &[char]) -> ParseResult<Expression> {
 
-pub fn parse_expression(tokens: &[Token]) -> ParseResult<Expression> {
-    let mut idx: usize = 0;
-    let expression: Expression;
+    let mut parse_error = ParseResult::Failure("unable to parse expression".to_string(), 0);
+    let mut parse_error_depth = 0;
 
-    match &tokens[idx] {
-        Token::Identifier(s) => {
-            expression = Expression::Identifier(s.clone());
-            idx += 1;
+    let idx = eat_whitespace(chars);
+
+    match parse_identifier(&chars[idx..]) {
+        ParseResult::Success(identifier, offset) => {
+            return ParseResult::Success(Expression::Identifier(identifier), idx + offset);
         }
-        Token::Num(n) => {
-            expression = Expression::NumberLiteral(*n);
-            idx += 1;
-        }
-        Token::BackSlash => {
-            match parse_function_literal(&tokens[idx..]) {
-                ParseResult::Failure(msg, depth) => {
-                    return ParseResult::Failure(msg, depth+1);
-                }
-                ParseResult::Success(function_literal, new_idx) => {
-                    idx += new_idx;
-                    expression = Expression::FunctionLiteral(function_literal);
-                }
+        ParseResult::Failure(msg, depth) => {
+            if depth >= parse_error_depth {
+                parse_error = ParseResult::Failure(msg, depth+1);
+                parse_error_depth = depth;
             }
         }
-        Token::CurlyBracket('{') => {
-            match parse_record_literal(&tokens[idx..]) {
-                ParseResult::Failure(msg, depth) => {
-                    return ParseResult::Failure(msg, depth+1);
-                }
-                ParseResult::Success(record_literal, new_idx) => {
-                    idx += new_idx;
-                    expression = Expression::RecordLiteral(record_literal);
-                }
-            }
-        }
-        _ => { return ParseResult::Failure("Expected identifier, number literal, or function literal at the beginning of expression".to_string(), 0); }
     }
 
-    ParseResult::Success(expression, idx)
+    match parse_number(&chars[idx..]) {
+        ParseResult::Success(number, offset) => {
+            return ParseResult::Success(Expression::NumberLiteral(number), idx + offset);
+        }
+        ParseResult::Failure(msg, depth) => {
+            if depth >= parse_error_depth {
+                parse_error = ParseResult::Failure(msg, depth+1);
+                parse_error_depth = depth;
+            }
+        }
+    }
+
+    match parse_function_literal(&chars[idx..]) {
+        ParseResult::Success(function_literal, offset) => {
+            return ParseResult::Success(Expression::FunctionLiteral(function_literal), idx + offset);
+        }
+        ParseResult::Failure(msg, depth) => {
+            if depth >= parse_error_depth {
+                parse_error = ParseResult::Failure(msg, depth+1);
+                parse_error_depth = depth;
+            }
+        }
+    }
+
+    match parse_record_literal(&chars[idx..]) {
+        ParseResult::Success(record_literal, offset) => {
+            return ParseResult::Success(Expression::Record(record_literal), idx + offset);
+        }
+        ParseResult::Failure(msg, depth) => {
+            if depth >= parse_error_depth {
+                parse_error = ParseResult::Failure(msg, depth+1);
+                //parse_error_depth = depth;
+            }
+        }
+    }
+
+    parse_error
+
 }

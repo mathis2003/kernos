@@ -1,6 +1,8 @@
-use crate::parser::parser_utils::ParseResult;
+use crate::parser::parser_utils::{ParseResult, eat_whitespace};
 use crate::parser::expression::{parse_expression, Expression};
-use crate::lexer::Token;
+use crate::parser::identifier::{parse_identifier, Identifier};
+//use crate::parser::number::{parse_number, Number};
+//use crate::parser::keyword::{parse_keyword, Keyword};
 
 
 
@@ -18,56 +20,61 @@ pub struct FunctionLiteral {
     body: Vec<Statement>,
 }
 
-// Take a slice of tokens and return an AST node and the number of tokens consumed
-pub fn parse_function_literal(tokens: &[Token]) -> ParseResult<FunctionLiteral> {
+// Take a slice of chars and return an AST node and the number of chars consumed
+pub fn parse_function_literal(chars: &[char]) -> ParseResult<FunctionLiteral> {
     let mut idx: usize = 0;
     let mut function_literal = FunctionLiteral {
         parameters: Vec::new(),
         body: Vec::new(),
     };
 
+    idx += eat_whitespace(&chars[idx..]);
+
     // parse
-    if tokens.get(idx) != Some(&Token::BackSlash) {
+    if chars.get(idx) != Some(&'\\') {
         return ParseResult::Failure("Expected lambda symbol (i.e.: backslash) at the beginning of function literal".to_string(), 0);
     }
 
+    idx += 1; // skip over the backslash
+
     // parse the parameters
-    idx += 1;
     loop {
-        match &tokens[idx] {
-            Token::Identifier(s) => {
+        idx += eat_whitespace(&chars[idx..]);
+        if &chars[idx..idx+2] == "->".to_string().chars().collect::<Vec<char>>().as_slice() {
+            break;
+        }
+        match parse_identifier(&chars[idx..]) {
+            ParseResult::Success(Identifier(s), offset) => {
                 function_literal.parameters.push(s.clone());
-                idx += 1;
-                match tokens.get(idx) {
-                    Some(Token::Comma) => {
-                        idx += 1;
-                    }
-                    Some(Token::SingleRightArrow) => {
-                        break;
-                    }
-                    _ => return ParseResult::Failure("Expected comma or right arrow after identifier".to_string(), 0),
-                }
+                idx += offset;
             }
-            Token::SingleRightArrow => {
-                break;
+            ParseResult::Failure(msg, depth) => {
+                return ParseResult::Failure(msg, depth+1);
             }
-            _ => return ParseResult::Failure("Expected identifier at the beginning of parameter list".to_string(), 0),
+        }
+
+        idx += eat_whitespace(&chars[idx..]);
+        if chars.get(idx) == Some(&',') {
+            idx += 1;
         }
     }
 
     // we are now on the single right arrow token, skip over it
-    idx += 1;
-    if tokens.get(idx) != Some(&Token::CurlyBracket('{')) {
+    idx += 2;
+    idx += eat_whitespace(&chars[idx..]); // whitespace: \   ->
+
+    if chars.get(idx) != Some(&'{') {
         return ParseResult::Failure("Expected curly bracket after right arrow".to_string(), 0);
     }
-    idx += 1;
+    idx += 1; // skip over the opening curly bracket token
 
     // parse the body
     loop {
-        if tokens.get(idx) == Some(&Token::CurlyBracket('}')) {
+        idx += eat_whitespace(&chars[idx..]);
+        if chars.get(idx) == Some(&'}') {
             break;
         }
-        match parse_statement(&tokens[idx..]) {
+        match parse_statement(&chars[idx..]) {
             ParseResult::Failure(msg, depth) => {
                 return ParseResult::Failure(msg, depth+1);
             }
@@ -80,57 +87,57 @@ pub fn parse_function_literal(tokens: &[Token]) -> ParseResult<FunctionLiteral> 
 
     // we are now on the closing curly bracket token, skip over it
     idx += 1;
+    idx += eat_whitespace(&chars[idx..]);
 
     ParseResult::Success(function_literal, idx)
 }
 
-pub fn parse_statement(tokens: &[Token]) -> ParseResult<Statement> {
+pub fn parse_statement(chars: &[char]) -> ParseResult<Statement> {
     let mut idx: usize = 0;
     let statement: Statement;
 
-    match &tokens[idx] {
-        Token::Keyword(s) => {
-            if s == "return" {
-                idx += 1;
-                match parse_expression(&tokens[idx..]) {
-                    ParseResult::Failure(msg, depth) => {
-                        return ParseResult::Failure(msg, depth+1);
-                    }
-                    ParseResult::Success(expression, new_idx) => {
-                        idx += new_idx;
-                        statement = Statement::ReturnStatement(expression);
-                    }
-                }
-            } else {
-                return ParseResult::Failure("Expected return statement at the beginning of statement".to_string(), 0);
+    idx += eat_whitespace(&chars[idx..]);
+
+    if &chars[idx..idx+6] == "return".to_string().chars().collect::<Vec<char>>().as_slice() {
+        idx += 6;
+        idx += eat_whitespace(&chars[idx..]); // whitespace: return    expression
+        match parse_expression(&chars[idx..]) {
+            ParseResult::Failure(msg, depth) => {
+                return ParseResult::Failure(msg, depth+1);
+            }
+            ParseResult::Success(expression, new_idx) => {
+                idx += new_idx;
+                statement = Statement::ReturnStatement(expression);
             }
         }
-        Token::Identifier(s) => {
-            let id = s.clone();
-            idx += 1;
-            if tokens.get(idx) == Some(&Token::SingleLeftArrow) {
-                idx += 1;
-                match parse_expression(&tokens[idx..]) {
-                    ParseResult::Failure(msg, depth) => {
-                        return ParseResult::Failure(msg, depth+1);
-                    }
-                    ParseResult::Success(expression, new_idx) => {
-                        idx += new_idx;
-                        statement = Statement::AssignmentStatement(id, expression);
-                    }
+    } else if let ParseResult::Success(Identifier(id), offset) = parse_identifier(&chars[idx..]) {
+        idx += offset;
+        if &chars[idx..idx+2] == "<-".to_string().chars().collect::<Vec<char>>().as_slice() {
+            idx += 2;
+            idx += eat_whitespace(&chars[idx..]); // whitespace: id <- expression
+            match parse_expression(&chars[idx..]) {
+                ParseResult::Failure(msg, depth) => {
+                    return ParseResult::Failure(msg, depth+1);
                 }
-            } else {
-                return ParseResult::Failure("Expected assignment operator after identifier".to_string(), 0);
+                ParseResult::Success(expression, new_idx) => {
+                    idx += new_idx;
+                    statement = Statement::AssignmentStatement(id, expression);
+                }
             }
+        } else {
+            return ParseResult::Failure("Expected left arrow after identifier".to_string(), 0);
         }
-        _ => return ParseResult::Failure("Expected return statement or identifier at the beginning of statement".to_string(), 0),
+    } else {
+        return ParseResult::Failure("Expected return statement or identifier at the beginning of statement".to_string(), 0);
     }
 
-    if tokens.get(idx) != Some(&Token::SemiColon) {
+    if chars.get(idx) != Some(&';') {
         return ParseResult::Failure("Expected semicolon at the end of statement".to_string(), 0);
     }
 
-    idx += 1;
+    idx += 1; // skip over the semicolon
+
+    idx += eat_whitespace(&chars[idx..]);
 
     ParseResult::Success(statement, idx)
 }
